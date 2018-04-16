@@ -25,6 +25,7 @@ float rightDistance = 0;
 float rightAngle = 0;
 int rightOrLeft = 0;
 
+// This is when the master is writing to salve
 void receiveEvent(int bytes)
 {
   // read the received byte as integer. This indicates what data to send back when master is requesting data
@@ -33,17 +34,18 @@ void receiveEvent(int bytes)
           
 }
 
+// This is when the master wants the slave to write something
 void requestEvent() 
 {
    // receive message byte as a character
    // if master's request is right side data, ("1"), send back the right side data
    // if master's request is left side data, ("2"), send back the left side data
    if(rightOrLeft == 1) { //send back right data
-    Wire.write(rightDistance);
-    Wire.write(rightAngle);
+    Wire.write((byte)rightDistance);
+    Wire.write((byte)rightAngle);
    } else if(rightOrLeft == 2) { //send back left data
-    Wire.write(leftDistance);
-    Wire.write(leftAngle);
+    Wire.write((byte)leftDistance);
+    Wire.write((byte)leftAngle);
    }
 
 }

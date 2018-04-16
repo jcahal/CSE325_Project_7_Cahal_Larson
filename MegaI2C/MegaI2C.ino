@@ -15,7 +15,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55);    // define BNO sensor object
 
 #define GPSECHO  false                        // echo GPS Sentence 
 #define Threshold 5                           // Threshold for Obstacle avoidance (number of obstacles)
-#define SLAVE_PIN
+#define SLAVE_PIN 8
 
 LiquidCrystal lcd( 8, 9, 4, 5, 6, 7); // define lcd pins use these default values for OUR LCD
 
@@ -166,10 +166,14 @@ void ReadLidar() {    // Output: Lidar Data
   Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
   if(Wire.available())
     rightDistance = Wire.read();
+  Serial.print("RD: ");
+  Serial.print(rightDistance);
 
   Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
   if(Wire.available())
     rightAngle = Wire.read();
+  Serial.print("RA: ");
+  Serial.print(rightAngle);
 
   // GET LEFT OBSTICLE DIST AND ANGLE
   Wire.beginTransmission(SLAVE_PIN);
@@ -179,10 +183,14 @@ void ReadLidar() {    // Output: Lidar Data
   Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
   if(Wire.available())
     leftDistance = Wire.read();
+  Serial.print("LD: ");
+  Serial.print(leftDistance);
 
   Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
   if(Wire.available())
     leftAngle = Wire.read();
+  Serial.print("LA: ");
+  Serial.print(leftAngle);
 
   if(rightDistance > 0) {
     rightOrLeft = 1;
