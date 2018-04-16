@@ -45,20 +45,33 @@ void setup() {
   myservo.attach(44);     // servo is connected to pin 44     (All pins are used by LCD except 2. Pin 2 is used for DC motor)
   lcd.begin( 16, 2 );     // LCD type is 16x2 (col & row)
 
-  ///Setting the reference (Lat and Lon)///
-  localkey = 0;
-  while (localkey != 1) {
-    lcd.clear();
-    localkey = keypad.getKey();
-    lcd.print("Press Select");
-    lcd.setCursor(0, 1);
-    lcd.print("to save dest.");
-    delay(100);
+  Wire.begin();
+  Serial.begin(9600);     // serial for monitoring
+  Serial.println("Got Hear!");
+  if (!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF)) {
+    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    while (1);
   }
-  GPSRead();
-  latDestination = lat;     // saving the destiantion point
-  lonDestination = lon;     // saving the destiantion point
-  localkey = 0;
+  byte c_data[22] = {0, 0, 0, 0, 0, 0, 209, 4, 9, 5, 9, 6, 0, 0, 255, 255, 255, 255, 232, 3, 1, 3};               // Use your CALIBRATION DATA
+  bno.setCalibData(c_data);                                                                                       // SET CALIBRATION DATA
+  bno.setExtCrystalUse(true);
+
+
+  // GPS 
+  noInterrupts();           // disable all interrupts
+  TCCR4A = 0;
+  TCCR4B = 0;
+  TCNT4  = 336;             // every 1 second
+  TCCR4B |= (1 << CS42);    // 256 prescaler
+  TIMSK4 |= (1 << TOIE4);  // enable timer compare interrupt
+  interrupts();
+
+  GPS.begin(9600);
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);   // ask GPS to send RMC & GGA sentences
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate, don't use higher rates
+  GPS.sendCommand(PGCMD_ANTENNA);               // notify if antenna is detected
+  useInterrupt(true);                           // use interrupt for reading chars of GPS sentences (From Serial Port)
+
   while (localkey != 1) {
     lcd.clear();
     localkey = keypad.getKey();
@@ -68,36 +81,19 @@ void setup() {
     delay(100);
   }
 
+  GPSRead();
+  latDestination = lat;     // saving the destiantion point
+  lonDestination = lon;     // saving the destiantion point
+  localkey = 0;
 
-  Serial.begin(9600);     // serial for monitoring
-  if (!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF)) {
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while (1);
-  }
-  byte c_data[22] = {0, 0, 0, 0, 0, 0, 209, 4, 9, 5, 9, 6, 0, 0, 255, 255, 255, 255, 232, 3, 1, 3};               // Use your CALIBRATION DATA
-  bno.setCalibData(c_data);                                                                                       // SET CALIBRATION DATA
-  bno.setExtCrystalUse(true);
-
-  // set timer interrupts
+  // Steering and Actuate interupts
   noInterrupts();           // disable all interrupts
-  TCCR1A = 0;               // initialize timer1
-  TCCR1B = 0;               // initialize timer1
-  TCNT1  = 59016;           // interrupt is generated every 0.1 second ( ISR(TIMER1_OVF_vect) is called)
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1  = 59016;           // every 0.1 second
   TCCR1B |= (1 << CS12);    // 256 prescaler
-  TIMSK1 |= (1 << TOIE1);   // enable timer compare interrupt
-
-  TCCR4A = 0;               // initialize timer4
-  TCCR4B = 0;               // initialize timer4
-  TCNT4  = 336;             // interrupt is generated every 1 second  ( ISR(TIMER4_OVF_vect) is called)
-  TCCR4B |= (1 << CS42);    // 256 prescaler
-  TIMSK4 |= (1 << TOIE4);   // enable timer compare interrupt
-  interrupts();             // enable intrrupt flag again
-
-  GPS.begin(9600);
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);   // ask GPS to send RMC & GGA sentences
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate, don't use higher rates
-  GPS.sendCommand(PGCMD_ANTENNA);               // notify if antenna is detected
-  useInterrupt(true);                           // use interrupt for reading chars of GPS sentences (From Serial Port)
+  TIMSK1 |= (1 << TOIE1);  // enable timer compare interrupt
+  interrupts();
 }
 
 SIGNAL(TIMER0_COMPA_vect) {       // don't change this !!
@@ -127,6 +123,14 @@ ISR(TIMER4_OVF_vect) {  // Timer interrupt for reading GPS DATA
 
 void GPSRead() {
   // read GPS data
+    // read from GPS module and update the current position
+  Serial.println("ReadGPS() called");
+  if (GPS.newNMEAreceived()) {
+    if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
+      return;  // we can fail to parse a sentence in which case we should just wait for another
+  }
+  lat = GPS.latitudeDegrees * 100000;
+  lon = GPS.longitudeDegrees * 100000;
 }
 
 
@@ -157,22 +161,71 @@ void ReadLidar() {    // Output: Lidar Data
   // read Lidar Data from Nano Board (I2C)
   // you should request data from Nano and read the number of obstacle (within the range) on your rightside and leftside
   // Then, you can decide to either do nothing, turn left or turn right based on threshold. For instance, 0 = do nothing, 1= left and 2 = right
+
+  
+  String rdStr = String();
+  String raStr = String();
+  String ldStr = String();
+  String laStr = String();
+  String diag = String();
+
+  int rLen = 32;
+  
+  Wire.requestFrom(SLAVE_PIN, 32); //request 4 bytes from slave
+  while((rLen - 6) < Wire.available()) {
+    char c = Wire.read();
+    rdStr.concat(c);
+  }
+  
+  while((rLen - 12) < Wire.available()) {
+    char c = Wire.read();
+    raStr.concat(c);
+  }
+
+  while((rLen - 18) < Wire.available()) {
+    char c = Wire.read();
+    ldStr.concat(c);
+  }
+
+  while((rLen - 24) < Wire.available()) {
+    char c = Wire.read();
+    laStr.concat(c);
+  }
+
+  while(Wire.available()) {
+    char c = Wire.read();
+    diag.concat(c);
+  }
+  
+  Serial.print("RD: ");
+  Serial.print(rdStr.toFloat());
+  Serial.print(", RA: ");
+  Serial.print(raStr.toFloat());
+  Serial.print(" LD: ");
+  Serial.print(ldStr.toFloat());
+  Serial.print(" LA: ");
+  Serial.println(laStr.toFloat());
+  Serial.print("Diags: ");
+  Serial.println(diag);
+  
   
   // GET RIGHT OBSTICLE DIST AND ANGLE
-  Wire.beginTransmission(SLAVE_PIN);
+  /*Wire.beginTransmission(SLAVE_PIN);
   Wire.write(1);
   Wire.endTransmission();
 
-  Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
-  if(Wire.available())
-    rightDistance = Wire.read();
-  Serial.print("RD: ");
+  Wire.requestFrom(SLAVE_PIN, 15); //request 4 bytes from slave
+  while(4 < Wire.available()) {
+    char c = Wire.read();
+    Serial.print(c);
+  }
+  rightDistance = Wire.read();
   Serial.print(rightDistance);
 
   Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
   if(Wire.available())
     rightAngle = Wire.read();
-  Serial.print("RA: ");
+  Serial.print(" RA: ");
   Serial.print(rightAngle);
 
   // GET LEFT OBSTICLE DIST AND ANGLE
@@ -183,22 +236,22 @@ void ReadLidar() {    // Output: Lidar Data
   Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
   if(Wire.available())
     leftDistance = Wire.read();
-  Serial.print("LD: ");
+  Serial.print(" LD: ");
   Serial.print(leftDistance);
 
   Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
   if(Wire.available())
     leftAngle = Wire.read();
-  Serial.print("LA: ");
-  Serial.print(leftAngle);
+  Serial.print(" LA: ");
+  Serial.println(leftAngle);
 
   if(rightDistance > 0) {
     rightOrLeft = 1;
   } else if(leftDistance > 0) {
-    leftOrLeft = 1;
+    rightOrLeft = 1;
   } else {
     rightOrLeft = 0;
-  }
+  }*/
 
 }
 
@@ -206,6 +259,7 @@ ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
   sei();                  // reset interrupt flag
   TCNT1  = 59016;
   ReadHeading();
+  ReadLidar();
   CalculateBearing();
   CalculateSteer();
   SetCarDirection();
