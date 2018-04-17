@@ -59,6 +59,11 @@ void requestEvent()
    Wire.write(laStr.c_str());
 
    Wire.write(diag.c_str());
+
+   rd = -1.0;
+   ra = -1.0;
+   ld = -1.0;
+   la = -1.0;
 }
 
 void loop() 
@@ -104,4 +109,3 @@ void loop()
     }
   }
 }
-
