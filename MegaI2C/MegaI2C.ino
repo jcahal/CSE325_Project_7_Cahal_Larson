@@ -15,7 +15,7 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55);    // define BNO sensor object
 
 #define GPSECHO  false                        // echo GPS Sentence 
 #define Threshold 5                           // Threshold for Obstacle avoidance (number of obstacles)
-#define SLAVE_PIN 8
+#define SLAVE_ADDR 8
 
 LiquidCrystal lcd( 8, 9, 4, 5, 6, 7); // define lcd pins use these default values for OUR LCD
 
@@ -32,15 +32,13 @@ int carSpeedPin = 2;              // pin for DC motor (PWM for motor driver). do
 float errorHeadingRef = 0;        // error
 long int lat;                     // GPS latitude in degree decimal * 100000   |     we multiply decimal degree by 100000 to convert it to meter  https://en.wikipedia.org/wiki/Decimal_degrees
 long int lon;                     // GPS latitude in degree decimal * 100000   |     0.00001 decimal degree is equal to 1.0247 m at 23 degree N/S
-long int latDestination = 33.425891 * 100000;       // define an initial reference Latitude of destination
-long int lonDestination =  -111.940458 * 100000;    // define an initial reference Longitude of destination
+long int latDestination = 33.423716 * 100000; //33.425891 * 100000;       // define an initial reference Latitude of destination
+long int lonDestination =  -111.939204 * 100000; //-111.940458 * 100000;    // define an initial reference Longitude of destination
 int localkey = 0;                                   // var
 float rd = 0;
 float ra = 0;
 float ld = 0;
 float la = 0;
-String diag = String();
-
 
 void setup() {
   myservo.attach(44);     // servo is connected to pin 44     (All pins are used by LCD except 2. Pin 2 is used for DC motor)
@@ -48,7 +46,6 @@ void setup() {
 
   Wire.begin();
   Serial.begin(9600);     // serial for monitoring
-  Serial.println("Got Hear!");
   if (!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF)) {
     Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
     while (1);
@@ -199,10 +196,10 @@ void SetCarDirection() {    // Input: Lidar data
   // Set Steering angle,
   // If any obstacle is detected by Lidar, Ignore steering angle and turn left or right based on observation
   if(rd > 0 && rd < 1000)
-    sa = 80;
+    sa = 60;
     
   if(ld > 0 && ld < 1000)
-    sa = 105
+    sa = 115;
 }
 
 void SetCarSpeed() {  // Input: GPS data
@@ -217,40 +214,54 @@ void ReadLidar() {    // Output: Lidar Data
   // read Lidar Data from Nano Board (I2C)
   // you should request data from Nano and read the number of obstacle (within the range) on your rightside and leftside
   // Then, you can decide to either do nothing, turn left or turn right based on threshold. For instance, 0 = do nothing, 1= left and 2 = right
-
   
   String rdStr = String();
   String raStr = String();
   String ldStr = String();
   String laStr = String();
 
-  int rLen = 32;
+  int state = 0;
+
+  Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
+  Wire.write(1);        // send state 1
+  Wire.endTransmission();
   
-  Wire.requestFrom(SLAVE_PIN, 32); //request 4 bytes from slave
-  while((rLen - 6) < Wire.available()) {
+  Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
+  while(Wire.available()) {
     char c = Wire.read();
     rdStr.concat(c);
   }
   
-  while((rLen - 12) < Wire.available()) {
+  Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
+  Wire.write(2);        // change to state 2
+  Wire.endTransmission();
+  
+  Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
+  while(Wire.available()) {
     char c = Wire.read();
     raStr.concat(c);
   }
 
-  while((rLen - 18) < Wire.available()) {
+  Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
+  Wire.write(3);        // change to state 3
+  Wire.endTransmission();
+  
+  Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
+  while(Wire.available()) {
     char c = Wire.read();
     ldStr.concat(c);
   }
 
-  while((rLen - 24) < Wire.available()) {
+  Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
+  Wire.write(4);        // change to state 4
+  Wire.endTransmission();
+  
+  Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
+  while(Wire.available()) {
     char c = Wire.read();
     laStr.concat(c);
   }
 
-  while(Wire.available()) {
-    char c = Wire.read();
-    diag.concat(c);
-  }
 
   rd = rdStr.toFloat();
   ra = raStr.toFloat();
@@ -265,11 +276,6 @@ void ReadLidar() {    // Output: Lidar Data
   Serial.print(ld);
   Serial.print(" LA: ");
   Serial.println(la);
-  Serial.print("Diags: ");
-  Serial.println(diag);
-  
-  
-
 }
 
 ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
@@ -293,11 +299,16 @@ void printLocationOnLCD() {
 }
 
 void printDistanceOnLCD() {
-
+  
 }
 
 void printObstacleOnLCD() {
-
+  lcd.setCursor(0,0);
+  lcd.print("RD");
+  lcd.print(rd);
+  lcd.setCursor(0,1);
+  lcd.print("LD");
+  lcd.print(ld);
 }
 
 void loop() {

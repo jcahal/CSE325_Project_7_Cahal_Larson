@@ -14,13 +14,11 @@ int c1;                           // variable for received integer
 float minDist = 100000;       // minimum distance an object has to be to trigger response
 float aMinDist = 0;         // angle of the object when at minimum distance
 
-float ld = -1.0;
-float la = -1.0;
-float rd = -1.0;
-float ra = -1.0;
-int rOl = 999.99;
-
-String diag = String();
+float ld = -1.00;
+float la = -1.00;
+float rd = -1.00;
+float ra = -1.00;
+int state = 0;
 
 void setup() {
   pinMode(RPLIDAR_MOTOR, OUTPUT); // set lidar speed control pin as output
@@ -35,8 +33,7 @@ void receiveEvent(int bytes)
 {
   
   // read the received byte as integer. This indicates what data to send back when master is requesting data
-  if(Wire.available())
-    rOl = Wire.read(); 
+  state = Wire.read();
           
 }
 
@@ -47,29 +44,39 @@ void requestEvent()
    // receive message byte as a character
    // if master's request is right side data, ("1"), send back the right side data
    // if master's request is left side data, ("2"), send back the left side data
-
    String rdStr = String(rd, 2);
    String raStr = String(ra, 2);
    String ldStr = String(ld, 2);
    String laStr = String(la, 2);
 
-   Wire.write(rdStr.c_str());
-   Wire.write(raStr.c_str());
-   Wire.write(ldStr.c_str());
-   Wire.write(laStr.c_str());
+   switch(state) {
+    case 1: {
+      Wire.write(rdStr.c_str());
+      break;
+    }
+    case 2: {
+      Wire.write(raStr.c_str());
+      break;
+    }
+    case 3: {
+      Wire.write(ldStr.c_str());
+      break;
+    }
+    case 4: {
+      Wire.write(laStr.c_str());
+      break;
+    }
+   }
 
-   Wire.write(diag.c_str());
-
-   rd = -1.0;
-   ra = -1.0;
-   ld = -1.0;
-   la = -1.0;
+   rd = -1.00;
+   ra = -1.00;
+   ld = -1.00;
+   la = -1.00;
 }
 
 void loop() 
 {
   if (IS_OK(lidar.waitPoint())) { // if lidar is working properly (waiting time less than timeout)
-    diag = "LIDAR_OK";
     // read angle and distance of the obstacle
     // filter data (keep only the data in desired range and with desired angle) 
     // COUNT the number of obstacles on LEF and RIGHT side
@@ -99,7 +106,6 @@ void loop()
     }
     
   } else {                                                  // if lidar is not responding           // Dont change this......
-    diag = "LIDAR_ER";
     analogWrite(RPLIDAR_MOTOR, 0);                          //stop the rplidar motor                // Dont change this......
     rplidar_response_device_info_t info;                    // try to detect RPLIDAR...             // Dont change this......
     if (IS_OK(lidar.getDeviceInfo(info, 100))) {            // if detected,                         // Dont change this......
