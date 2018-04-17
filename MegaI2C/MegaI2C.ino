@@ -20,9 +20,11 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55);    // define BNO sensor object
 LiquidCrystal lcd( 8, 9, 4, 5, 6, 7); // define lcd pins use these default values for OUR LCD
 
 // Global variables that change across functions
-int steeringAngle = 90;        // servo initial angle (range is 0:180)
 float heading = 0;          // Heading in degree
-int carSpeed;
+imu::Vector<3> euler;                         // Vector of IMU
+float bearing = 0;          // initialize bearing
+int sa = 90;        // servo initial angle (range is 0:180)
+int carSpeed = 15;
 int LidarRight;             // LIDAR left
 int LidarLeft;              // LIDAR right
 boolean usingInterrupt = false;
@@ -32,13 +34,12 @@ long int lat;                     // GPS latitude in degree decimal * 100000   |
 long int lon;                     // GPS latitude in degree decimal * 100000   |     0.00001 decimal degree is equal to 1.0247 m at 23 degree N/S
 long int latDestination = 33.425891 * 100000;       // define an initial reference Latitude of destination
 long int lonDestination =  -111.940458 * 100000;    // define an initial reference Longitude of destination
-float bearing = 0;                                  // initialize bearing
 int localkey = 0;                                   // var
-float leftDistance = 0;
-float leftAngle = 0;
-float rightDistance = 0;
-float rightAngle = 0;
-float rightOrLeft = 0;
+float rd = 0;
+float ra = 0;
+float ld = 0;
+float la = 0;
+String diag = String();
 
 
 void setup() {
@@ -137,24 +138,79 @@ void GPSRead() {
 void ReadHeading()
 {
   // calculate HEADING
+  euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  heading = euler.x() + 10.37;
 }
 
 void CalculateBearing() {
   // Calculate Bearing
+  bearing = 90 - atan2((latDestination - lat),(lonDestination - lon)) * (180 / PI);
+  if(bearing < 0) {
+    bearing += 360;
+  }
 }
 
 void CalculateSteer() {
   // Calculate Steer angle based on GPS data and IMU
+  float dr;
+  float dl;
+  
+  if (heading > 360)
+    heading -= 360;
+
+  if(heading > bearing) {
+    dl = heading - bearing;
+    dr = (360 - heading) + bearing; 
+  } else {
+    dr = bearing - heading;
+    dl = (360 - bearing) + heading;
+  }
+
+  if (dl < dr) { 
+    sa = 60; // turn left all the way, it's closer...
+    
+    if(dl < 45)
+     sa = 70;
+
+    if(dl < 30)
+     sa = 80;
+
+    if(dl < 15)
+     sa = 85; 
+  } else {
+    sa = 125; // turn right, it's closer...
+
+    if(dr < 45)
+     sa = 115;
+
+    if(dr < 30)
+     sa = 105;
+
+    if(dr < 15)
+     sa = 100;
+  }
+
+  if(heading >= bearing - 2 && heading <= bearing + 2) {
+    sa = 93; // go straight
+  }
 }
 
 void SetCarDirection() {    // Input: Lidar data
   // Set Steering angle,
   // If any obstacle is detected by Lidar, Ignore steering angle and turn left or right based on observation
+  if(rd > 0 && rd < 1000)
+    sa = 80;
+    
+  if(ld > 0 && ld < 1000)
+    sa = 105
 }
 
 void SetCarSpeed() {  // Input: GPS data
   // set speed,
   // if destination is within 5 meters of current position, set speed to zero.
+  analogWrite(carSpeedPin, carSpeed); //change to carSpeed for production
+  myservo.write(sa);
+  
 }
 
 void ReadLidar() {    // Output: Lidar Data
@@ -167,7 +223,6 @@ void ReadLidar() {    // Output: Lidar Data
   String raStr = String();
   String ldStr = String();
   String laStr = String();
-  String diag = String();
 
   int rLen = 32;
   
@@ -196,62 +251,24 @@ void ReadLidar() {    // Output: Lidar Data
     char c = Wire.read();
     diag.concat(c);
   }
+
+  rd = rdStr.toFloat();
+  ra = raStr.toFloat();
+  ld = ldStr.toFloat();
+  la = laStr.toFloat();
   
   Serial.print("RD: ");
-  Serial.print(rdStr.toFloat());
+  Serial.print(rd);
   Serial.print(", RA: ");
-  Serial.print(raStr.toFloat());
+  Serial.print(ra);
   Serial.print(" LD: ");
-  Serial.print(ldStr.toFloat());
+  Serial.print(ld);
   Serial.print(" LA: ");
-  Serial.println(laStr.toFloat());
+  Serial.println(la);
   Serial.print("Diags: ");
   Serial.println(diag);
   
   
-  // GET RIGHT OBSTICLE DIST AND ANGLE
-  /*Wire.beginTransmission(SLAVE_PIN);
-  Wire.write(1);
-  Wire.endTransmission();
-
-  Wire.requestFrom(SLAVE_PIN, 15); //request 4 bytes from slave
-  while(4 < Wire.available()) {
-    char c = Wire.read();
-    Serial.print(c);
-  }
-  rightDistance = Wire.read();
-  Serial.print(rightDistance);
-
-  Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
-  if(Wire.available())
-    rightAngle = Wire.read();
-  Serial.print(" RA: ");
-  Serial.print(rightAngle);
-
-  // GET LEFT OBSTICLE DIST AND ANGLE
-  Wire.beginTransmission(SLAVE_PIN);
-  Wire.write(1);
-  Wire.endTransmission();
-
-  Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
-  if(Wire.available())
-    leftDistance = Wire.read();
-  Serial.print(" LD: ");
-  Serial.print(leftDistance);
-
-  Wire.requestFrom(SLAVE_PIN, 4); //request 4 bytes from slave
-  if(Wire.available())
-    leftAngle = Wire.read();
-  Serial.print(" LA: ");
-  Serial.println(leftAngle);
-
-  if(rightDistance > 0) {
-    rightOrLeft = 1;
-  } else if(leftDistance > 0) {
-    rightOrLeft = 1;
-  } else {
-    rightOrLeft = 0;
-  }*/
 
 }
 
