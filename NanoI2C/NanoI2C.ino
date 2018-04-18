@@ -14,10 +14,8 @@ int c1;                           // variable for received integer
 float minDist = 100000;       // minimum distance an object has to be to trigger response
 float aMinDist = 0;         // angle of the object when at minimum distance
 
-float ld = -1.00;
-float la = -1.00;
-float rd = -1.00;
-float ra = -1.00;
+float d = -1.00;
+float a = -1.00;
 int state = 0;
 
 void setup() {
@@ -38,40 +36,24 @@ void receiveEvent(int bytes)
 }
 
 // This is when the master wants the slave to write something
-void requestEvent() 
-{
-  
-   // receive message byte as a character
-   // if master's request is right side data, ("1"), send back the right side data
-   // if master's request is left side data, ("2"), send back the left side data
-   String rdStr = String(rd, 2);
-   String raStr = String(ra, 2);
-   String ldStr = String(ld, 2);
-   String laStr = String(la, 2);
+void requestEvent() {
+   String dStr = String(d, 2);
+   String aStr = String(a, 2);
 
    switch(state) {
-    case 1: {
-      Wire.write(rdStr.c_str());
+    case 1: { // send distance
+      Wire.write(dStr.c_str());
       break;
     }
-    case 2: {
-      Wire.write(raStr.c_str());
+    case 2: { // send angle
+      Wire.write(aStr.c_str());
       break;
     }
-    case 3: {
-      Wire.write(ldStr.c_str());
-      break;
-    }
-    case 4: {
-      Wire.write(laStr.c_str());
-      break;
+    case 3: { //master done with dist. and angle... reset
+      d = -1.00;
+      a = -1.00;  
     }
    }
-
-   rd = -1.00;
-   ra = -1.00;
-   ld = -1.00;
-   la = -1.00;
 }
 
 void loop() 
@@ -87,21 +69,11 @@ void loop()
     
     if (lidar.getCurrentPoint().startBit) {
       // a new scan, display the previous data...
-       minDist = 100000;
-       aMinDist = 0;
+       minDist = 3000;
     } else {
-       if ( distance > 0 &&  distance < minDist) {
-          minDist = distance;
-          aMinDist = angle;
-
-          //what side of the car is it
-          if(angle > 270 && angle < 350) { // left side
-            ld = distance;
-            la = angle;
-          } else if(angle > 10 && angle < 90) { // right side
-            rd = distance;
-            ra = angle;
-          }
+       if ( distance > 500) {
+          d = distance;
+          a = angle;
        }
     }
     

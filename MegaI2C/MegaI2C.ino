@@ -24,9 +24,7 @@ float heading = 0;          // Heading in degree
 imu::Vector<3> euler;                         // Vector of IMU
 float bearing = 0;          // initialize bearing
 int sa = 90;        // servo initial angle (range is 0:180)
-int carSpeed = 15;
-int LidarRight;             // LIDAR left
-int LidarLeft;              // LIDAR right
+int carSpeed = 10;
 boolean usingInterrupt = false;
 int carSpeedPin = 2;              // pin for DC motor (PWM for motor driver). don't use other pins....
 float errorHeadingRef = 0;        // error
@@ -35,10 +33,14 @@ long int lon;                     // GPS latitude in degree decimal * 100000   |
 long int latDestination = 33.423716 * 100000; //33.425891 * 100000;       // define an initial reference Latitude of destination
 long int lonDestination =  -111.939204 * 100000; //-111.940458 * 100000;    // define an initial reference Longitude of destination
 int localkey = 0;                                   // var
-float rd = 0;
-float ra = 0;
-float ld = 0;
-float la = 0;
+float d = 0;
+float a = 0;
+float dAvg;
+float aAvg;
+float dArray[10];
+float aArray[10];
+int objFlag = 0;
+int iterator = 1;
 
 void setup() {
   myservo.attach(44);     // servo is connected to pin 44     (All pins are used by LCD except 2. Pin 2 is used for DC motor)
@@ -117,12 +119,15 @@ ISR(TIMER4_OVF_vect) {  // Timer interrupt for reading GPS DATA
   sei();        //   reset interrupt flag
   TCNT4  = 336; //   re-initialize timer value
   GPSRead();    //   read GPS data
+  Serial.println();
+  Serial.print("Read GPS");
+  Serial.print(" Runtime: ");
+  Serial.println(millis() / 1000);
 }
 
 void GPSRead() {
   // read GPS data
     // read from GPS module and update the current position
-  Serial.println("ReadGPS() called");
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
       return;  // we can fail to parse a sentence in which case we should just wait for another
@@ -140,66 +145,109 @@ void ReadHeading()
 }
 
 void CalculateBearing() {
-  // Calculate Bearing
+  bearing = heading; //go straight
+  // Calculate Bearing base on GPS Destination
+  /*
   bearing = 90 - atan2((latDestination - lat),(lonDestination - lon)) * (180 / PI);
   if(bearing < 0) {
     bearing += 360;
   }
+  */
 }
 
 void CalculateSteer() {
   // Calculate Steer angle based on GPS data and IMU
   float dr;
   float dl;
-  
-  if (heading > 360)
+
+  if(!objFlag) {
+    if (heading > 360)
     heading -= 360;
 
-  if(heading > bearing) {
-    dl = heading - bearing;
-    dr = (360 - heading) + bearing; 
-  } else {
-    dr = bearing - heading;
-    dl = (360 - bearing) + heading;
-  }
-
-  if (dl < dr) { 
-    sa = 60; // turn left all the way, it's closer...
-    
-    if(dl < 45)
-     sa = 70;
-
-    if(dl < 30)
-     sa = 80;
-
-    if(dl < 15)
-     sa = 85; 
-  } else {
-    sa = 125; // turn right, it's closer...
-
-    if(dr < 45)
-     sa = 115;
-
-    if(dr < 30)
-     sa = 105;
-
-    if(dr < 15)
-     sa = 100;
-  }
-
-  if(heading >= bearing - 2 && heading <= bearing + 2) {
-    sa = 93; // go straight
+    if(heading > bearing) {
+      dl = heading - bearing;
+      dr = (360 - heading) + bearing; 
+    } else {
+      dr = bearing - heading;
+      dl = (360 - bearing) + heading;
+    }
+  
+    if (dl < dr) { 
+      sa = 60; // turn left all the way, it's closer...
+      
+      if(dl < 45)
+       sa = 70;
+  
+      if(dl < 30)
+       sa = 80;
+  
+      if(dl < 15)
+       sa = 85; 
+    } else {
+      sa = 125; // turn right, it's closer...
+  
+      if(dr < 45)
+       sa = 115;
+  
+      if(dr < 30)
+       sa = 105;
+  
+      if(dr < 15)
+       sa = 100;
+    }
+  
+    if(heading >= bearing - 2 && heading <= bearing + 2) {
+      sa = 93; // go straight
+    } 
   }
 }
 
 void SetCarDirection() {    // Input: Lidar data
   // Set Steering angle,
   // If any obstacle is detected by Lidar, Ignore steering angle and turn left or right based on observation
-  if(rd > 0 && rd < 1000)
-    sa = 60;
-    
-  if(ld > 0 && ld < 1000)
-    sa = 115;
+  // Filter Objs
+  if(dAvg < 2000) {
+    objFlag = 1;
+    if(aAvg > 350 && aAvg < 360) {
+      sa = 125;
+      Serial.print("D:");
+      Serial.print(dAvg);
+      Serial.print(", A:");
+      Serial.print(aAvg);
+      Serial.print(", SA:");
+      Serial.println(sa);
+    } else if(aAvg < 10 && aAvg > 0) {
+      sa = 60;
+      Serial.print("D:");
+      Serial.print(dAvg);
+      Serial.print(", A:");
+      Serial.print(aAvg);
+      Serial.print(", SA:");
+      Serial.println(sa);
+    }
+    if(aAvg < 350 && aAvg > 270) {
+      sa = 115;
+      Serial.print("D:");
+      Serial.print(dAvg);
+      Serial.print(", A:");
+      Serial.print(aAvg);
+      Serial.print(", SA:");
+      Serial.println(sa);
+    }
+    if(aAvg > 10 && aAvg < 90) {
+      sa = 70;
+      Serial.print("D:");
+      Serial.print(dAvg);
+      Serial.print(", A:");
+      Serial.print(aAvg);
+      Serial.print(", SA:");
+      Serial.println(sa);
+      
+      
+    }
+  } else {
+    objFlag = 0;
+  }
 }
 
 void SetCarSpeed() {  // Input: GPS data
@@ -210,18 +258,11 @@ void SetCarSpeed() {  // Input: GPS data
   
 }
 
-void ReadLidar() {    // Output: Lidar Data
-  // read Lidar Data from Nano Board (I2C)
-  // you should request data from Nano and read the number of obstacle (within the range) on your rightside and leftside
-  // Then, you can decide to either do nothing, turn left or turn right based on threshold. For instance, 0 = do nothing, 1= left and 2 = right
-  
-  String rdStr = String();
-  String raStr = String();
-  String ldStr = String();
-  String laStr = String();
+void ReadLidar() { 
+  String dStr = String();
+  String aStr = String();
 
-  int state = 0;
-
+  // Get Obj @ Distance > 500
   Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
   Wire.write(1);        // send state 1
   Wire.endTransmission();
@@ -229,9 +270,10 @@ void ReadLidar() {    // Output: Lidar Data
   Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
   while(Wire.available()) {
     char c = Wire.read();
-    rdStr.concat(c);
+    dStr.concat(c);
   }
-  
+
+  // Get Angle of Obj @ Distance > 500
   Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
   Wire.write(2);        // change to state 2
   Wire.endTransmission();
@@ -239,54 +281,56 @@ void ReadLidar() {    // Output: Lidar Data
   Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
   while(Wire.available()) {
     char c = Wire.read();
-    raStr.concat(c);
+    aStr.concat(c);
   }
 
-  Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
-  Wire.write(3);        // change to state 3
-  Wire.endTransmission();
-  
-  Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
-  while(Wire.available()) {
-    char c = Wire.read();
-    ldStr.concat(c);
-  }
-
-  Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
-  Wire.write(4);        // change to state 4
-  Wire.endTransmission();
-  
-  Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
-  while(Wire.available()) {
-    char c = Wire.read();
-    laStr.concat(c);
-  }
-
-
-  rd = rdStr.toFloat();
-  ra = raStr.toFloat();
-  ld = ldStr.toFloat();
-  la = laStr.toFloat();
-  
-  Serial.print("RD: ");
-  Serial.print(rd);
-  Serial.print(", RA: ");
-  Serial.print(ra);
-  Serial.print(" LD: ");
-  Serial.print(ld);
-  Serial.print(" LA: ");
-  Serial.println(la);
+  d = dStr.toFloat();
+  a = aStr.toFloat();
+  dArray[(millis() / 100) % 10] = d;
+  aArray[(millis() / 100) % 10] = a;
 }
 
 ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
   sei();                  // reset interrupt flag
   TCNT1  = 59016;
+
+  int x = (millis() / 100) % 10;
+
+  if(x == 0) {
+    dAvg = 0;
+    aAvg = 0;
+    for(int i = 0; i < 10; i++) {
+      dArray[i] = 0;
+      aArray[i] = 0;
+    }
+  }
+  
+  Serial.println();
+  Serial.print("Iteration: ");
+  Serial.print(x);
+  Serial.print(" Runtime: ");
+  Serial.println(millis() / 1000);
+  Serial.println();
+
   ReadHeading();
   ReadLidar();
   CalculateBearing();
   CalculateSteer();
   SetCarDirection();
   SetCarSpeed();
+
+  dAvg += dArray[x];
+  aAvg += aArray[x];
+  dAvg = dAvg / (x + 1);
+  aAvg = aAvg / (x + 1);
+
+  Serial.print("\tdAvg = ");
+  Serial.print(dAvg);
+
+  Serial.println();
+  
+  Serial.print("\taAvg = ");
+  Serial.print(aAvg);
 }
 
 
@@ -303,12 +347,7 @@ void printDistanceOnLCD() {
 }
 
 void printObstacleOnLCD() {
-  lcd.setCursor(0,0);
-  lcd.print("RD");
-  lcd.print(rd);
-  lcd.setCursor(0,1);
-  lcd.print("LD");
-  lcd.print(ld);
+
 }
 
 void loop() {
