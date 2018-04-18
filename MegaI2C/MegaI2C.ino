@@ -40,7 +40,8 @@ float aAvg;
 float dArray[10];
 float aArray[10];
 int objFlag = 0;
-int iterator = 1;
+float dAvg2Use = 0;
+float aAvg2Use = 0;
 
 void setup() {
   myservo.attach(44);     // servo is connected to pin 44     (All pins are used by LCD except 2. Pin 2 is used for DC motor)
@@ -206,9 +207,9 @@ void SetCarDirection() {    // Input: Lidar data
   // Set Steering angle,
   // If any obstacle is detected by Lidar, Ignore steering angle and turn left or right based on observation
   // Filter Objs
-  if(dAvg < 2000) {
+  if(dAvg2Use < 2000) {
     objFlag = 1;
-    if(aAvg > 350 && aAvg < 360) {
+    if(aAvg2Use > 350 && aAvg2Use < 360) {
       sa = 125;
       Serial.print("D:");
       Serial.print(dAvg);
@@ -216,7 +217,7 @@ void SetCarDirection() {    // Input: Lidar data
       Serial.print(aAvg);
       Serial.print(", SA:");
       Serial.println(sa);
-    } else if(aAvg < 10 && aAvg > 0) {
+    } else if(aAvg2Use < 10 && aAvg2Use > 0) {
       sa = 60;
       Serial.print("D:");
       Serial.print(dAvg);
@@ -225,7 +226,7 @@ void SetCarDirection() {    // Input: Lidar data
       Serial.print(", SA:");
       Serial.println(sa);
     }
-    if(aAvg < 350 && aAvg > 270) {
+    if(aAvg2Use < 350 && aAvg2Use > 270) {
       sa = 115;
       Serial.print("D:");
       Serial.print(dAvg);
@@ -234,7 +235,7 @@ void SetCarDirection() {    // Input: Lidar data
       Serial.print(", SA:");
       Serial.println(sa);
     }
-    if(aAvg > 10 && aAvg < 90) {
+    if(aAvg2Use > 10 && aAvg2Use < 90) {
       sa = 70;
       Serial.print("D:");
       Serial.print(dAvg);
@@ -297,6 +298,22 @@ ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
   int x = (millis() / 100) % 10;
 
   if(x == 0) {
+    for(int i = 0; i < 10; i++) {
+      dAvg += dArray[i];
+      aAvg += aArray[i];
+    }
+
+    dAvg2Use = dAvg / 10;
+    aAvg2Use = aAvg / 10;
+
+    Serial.print("\tdAvg = ");
+    Serial.print(dAvg);
+  
+    Serial.println();
+    
+    Serial.print("\taAvg = ");
+    Serial.print(aAvg);
+    
     dAvg = 0;
     aAvg = 0;
     for(int i = 0; i < 10; i++) {
@@ -321,16 +338,6 @@ ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
 
   dAvg += dArray[x];
   aAvg += aArray[x];
-  dAvg = dAvg / (x + 1);
-  aAvg = aAvg / (x + 1);
-
-  Serial.print("\tdAvg = ");
-  Serial.print(dAvg);
-
-  Serial.println();
-  
-  Serial.print("\taAvg = ");
-  Serial.print(aAvg);
 }
 
 
