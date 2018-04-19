@@ -11,7 +11,7 @@ unsigned long time = millis();    // time variable for reseting variables
 
 int c1;                           // variable for received integer
 
-float minDist = 100000;       // minimum distance an object has to be to trigger response
+float minDist = 1250;       // minimum distance an object has to be to trigger response
 float aMinDist = 0;         // angle of the object when at minimum distance
 
 float d = -1.00;
@@ -69,9 +69,9 @@ void loop()
     
     if (lidar.getCurrentPoint().startBit) {
       // a new scan, display the previous data...
-       minDist = 3000;
+       minDist = 1250;
     } else {
-       if ( distance > 500) {
+       if ( distance > 500 && distance < 1250) {
           d = distance;
           a = angle;
        }
