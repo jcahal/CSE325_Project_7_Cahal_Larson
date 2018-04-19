@@ -80,7 +80,8 @@ void setup() {
     Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
     while (1);
   }
-  byte c_data[22] = {255, 255, 0, 0, 250, 255, 205, 253, 175, 2, 16, 2, 1, 0, 254, 255, 1, 0, 232, 3, 27, 4};               // Use your CALIBRATION DATA
+  byte c_data[22] = {0, 0, 0, 0, 0, 0, 82, 253, 156, 2, 80, 1, 0, 0, 0, 0, 2, 0, 232, 3, 184, 2};
+  //byte c_data[22] = {255, 255, 0, 0, 250, 255, 205, 253, 175, 2, 16, 2, 1, 0, 254, 255, 1, 0, 232, 3, 27, 4};               // Use your CALIBRATION DATA
   //0, 0, 0, 0, 0, 0, 209, 4, 9, 5, 9, 6, 0, 0, 255, 255, 255, 255, 232, 3, 1, 3
   bno.setCalibData(c_data);                                                                                       // SET CALIBRATION DATA
   bno.setExtCrystalUse(true);
@@ -105,6 +106,8 @@ void setup() {
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate, don't use higher rates
   GPS.sendCommand(PGCMD_ANTENNA);               // notify if antenna is detected
   useInterrupt(true);                           // use interrupt for reading chars of GPS sentences (From Serial Port)
+
+  bearing = heading;
 }
 
 SIGNAL(TIMER0_COMPA_vect) {       // don't change this !!
@@ -284,12 +287,13 @@ void ReadLidar() {    // Output: Lidar Data
   d = dStr.toFloat();
   a = aStr.toFloat();
 
-  if(d > 500 && d < 1000)
-  {
-    objectDetected = true;
-  }
-  else
-  {
+  if(d > 500 && d < 1000) {
+    if((a > 0 && a < 90) || (a > 270 && a < 360)) {
+      objectDetected = true;
+    } else {
+      objectDetected = false;
+    }
+  } else {
     objectDetected = false;
   }
   
