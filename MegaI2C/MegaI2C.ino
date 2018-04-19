@@ -80,7 +80,8 @@ void setup() {
     Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
     while (1);
   }
-  byte c_data[22] = {0, 0, 0, 0, 0, 0, 209, 4, 9, 5, 9, 6, 0, 0, 255, 255, 255, 255, 232, 3, 1, 3};               // Use your CALIBRATION DATA
+  byte c_data[22] = {255, 255, 0, 0, 250, 255, 205, 253, 175, 2, 16, 2, 1, 0, 254, 255, 1, 0, 232, 3, 27, 4};               // Use your CALIBRATION DATA
+  //0, 0, 0, 0, 0, 0, 209, 4, 9, 5, 9, 6, 0, 0, 255, 255, 255, 255, 232, 3, 1, 3
   bno.setCalibData(c_data);                                                                                       // SET CALIBRATION DATA
   bno.setExtCrystalUse(true);
 
