@@ -16,7 +16,7 @@ float aMinDist = 0;         // angle of the object when at minimum distance
 
 float d = -1.00;
 float a = -1.00;
-int state = 0;
+int objLocation = 0;
 
 void setup() {
   pinMode(RPLIDAR_MOTOR, OUTPUT); // set lidar speed control pin as output
@@ -70,10 +70,10 @@ void loop()
     if (lidar.getCurrentPoint().startBit) {
       // a new scan, display the previous data...
        minDist = 3000;
+       objLocation = 0;
     } else {
-       if ( distance > 500) {
-          d = distance;
-          a = angle;
+       if ( distance > 500 && distance > 3000) {
+          if(angle > )
        }
     }
     
