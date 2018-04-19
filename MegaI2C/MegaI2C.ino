@@ -1,3 +1,7 @@
+// Fix Nano code to only send relavant points
+// When you dont execute CalcuateSteering and CalcuateBearing it stops jumping around
+// Threshold 1250 distance needs testing, change to 750 for testing
+
 #include <Adafruit_BNO055.h>
 #include <FlexiTimer2.h>
 #include <Adafruit_Sensor.h>
@@ -20,59 +24,47 @@ Adafruit_BNO055 bno = Adafruit_BNO055(55);    // define BNO sensor object
 LiquidCrystal lcd( 8, 9, 4, 5, 6, 7); // define lcd pins use these default values for OUR LCD
 
 // Global variables that change across functions
+int steeringAngle = 93;        // servo initial angle (range is 0:180)
 float heading = 0;          // Heading in degree
-imu::Vector<3> euler;                         // Vector of IMU
-float bearing = 0;          // initialize bearing
-int sa = 90;        // servo initial angle (range is 0:180)
-int carSpeed = 10;
+int LidarRight;             // LIDAR left
+int LidarLeft;              // LIDAR right
 boolean usingInterrupt = false;
 int carSpeedPin = 2;              // pin for DC motor (PWM for motor driver). don't use other pins....
 float errorHeadingRef = 0;        // error
 long int lat;                     // GPS latitude in degree decimal * 100000   |     we multiply decimal degree by 100000 to convert it to meter  https://en.wikipedia.org/wiki/Decimal_degrees
 long int lon;                     // GPS latitude in degree decimal * 100000   |     0.00001 decimal degree is equal to 1.0247 m at 23 degree N/S
-long int latDestination = 33.423716 * 100000; //33.425891 * 100000;       // define an initial reference Latitude of destination
-long int lonDestination =  -111.939204 * 100000; //-111.940458 * 100000;    // define an initial reference Longitude of destination
+long int latDestination = 33.425891 * 100000;       // define an initial reference Latitude of destination
+long int lonDestination =  -111.940458 * 100000;    // define an initial reference Longitude of destination
+float Bearing = 0;                                  // initialize bearing
 int localkey = 0;                                   // var
+imu::Vector<3> euler;                         // Vector of IMU
+int carSpeed = 15;
+float bearing = 0;
+int distance = 0;
+int distL = 0;                                // The distance left in degrees to desired heading
+int distR = 0;                                // The distance right in degrees to desired heading
 float d = 0;
 float a = 0;
-float dAvg;
-float aAvg;
-float dArray[10];
-float aArray[10];
-int objFlag = 0;
-float dAvg2Use = 0;
-float aAvg2Use = 0;
+boolean objectDetected = false;
 
 void setup() {
   myservo.attach(44);     // servo is connected to pin 44     (All pins are used by LCD except 2. Pin 2 is used for DC motor)
   lcd.begin( 16, 2 );     // LCD type is 16x2 (col & row)
 
-  Wire.begin();
-  Serial.begin(9600);     // serial for monitoring
-  if (!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF)) {
-    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    while (1);
+  ///Setting the reference (Lat and Lon)///
+  localkey = 0;
+  while (localkey != 1) {
+    lcd.clear();
+    localkey = keypad.getKey();
+    lcd.print("Press Select");
+    lcd.setCursor(0, 1);
+    lcd.print("to save dest.");
+    delay(100);
   }
-  byte c_data[22] = {0, 0, 0, 0, 0, 0, 209, 4, 9, 5, 9, 6, 0, 0, 255, 255, 255, 255, 232, 3, 1, 3};               // Use your CALIBRATION DATA
-  bno.setCalibData(c_data);                                                                                       // SET CALIBRATION DATA
-  bno.setExtCrystalUse(true);
-
-
-  // GPS 
-  noInterrupts();           // disable all interrupts
-  TCCR4A = 0;
-  TCCR4B = 0;
-  TCNT4  = 336;             // every 1 second
-  TCCR4B |= (1 << CS42);    // 256 prescaler
-  TIMSK4 |= (1 << TOIE4);  // enable timer compare interrupt
-  interrupts();
-
-  GPS.begin(9600);
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);   // ask GPS to send RMC & GGA sentences
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate, don't use higher rates
-  GPS.sendCommand(PGCMD_ANTENNA);               // notify if antenna is detected
-  useInterrupt(true);                           // use interrupt for reading chars of GPS sentences (From Serial Port)
-
+  GPSRead();
+  latDestination = lat;     // saving the destiantion point
+  lonDestination = lon;     // saving the destiantion point
+  localkey = 0;
   while (localkey != 1) {
     lcd.clear();
     localkey = keypad.getKey();
@@ -82,19 +74,40 @@ void setup() {
     delay(100);
   }
 
-  GPSRead();
-  latDestination = lat;     // saving the destiantion point
-  lonDestination = lon;     // saving the destiantion point
-  localkey = 0;
 
-  // Steering and Actuate interupts
+  Serial.begin(9600);     // serial for monitoring
+  if (!bno.begin(Adafruit_BNO055::OPERATION_MODE_NDOF)) {
+    Serial.print("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+    while (1);
+  }
+  byte c_data[22] = {0, 0, 0, 0, 0, 0, 82, 253, 156, 2, 80, 1, 0, 0, 0, 0, 2, 0, 232, 3, 184, 2};
+  //byte c_data[22] = {255, 255, 0, 0, 250, 255, 205, 253, 175, 2, 16, 2, 1, 0, 254, 255, 1, 0, 232, 3, 27, 4};               // Use your CALIBRATION DATA
+  //0, 0, 0, 0, 0, 0, 209, 4, 9, 5, 9, 6, 0, 0, 255, 255, 255, 255, 232, 3, 1, 3
+  bno.setCalibData(c_data);                                                                                       // SET CALIBRATION DATA
+  bno.setExtCrystalUse(true);
+
+  // set timer interrupts
   noInterrupts();           // disable all interrupts
-  TCCR1A = 0;
-  TCCR1B = 0;
-  TCNT1  = 59016;           // every 0.1 second
+  TCCR1A = 0;               // initialize timer1
+  TCCR1B = 0;               // initialize timer1
+  TCNT1  = 59016;           // interrupt is generated every 0.1 second ( ISR(TIMER1_OVF_vect) is called)
   TCCR1B |= (1 << CS12);    // 256 prescaler
-  TIMSK1 |= (1 << TOIE1);  // enable timer compare interrupt
-  interrupts();
+  TIMSK1 |= (1 << TOIE1);   // enable timer compare interrupt
+
+  TCCR4A = 0;               // initialize timer4
+  TCCR4B = 0;               // initialize timer4
+  TCNT4  = 336;             // interrupt is generated every 1 second  ( ISR(TIMER4_OVF_vect) is called)
+  TCCR4B |= (1 << CS42);    // 256 prescaler
+  TIMSK4 |= (1 << TOIE4);   // enable timer compare interrupt
+  interrupts();             // enable intrrupt flag again
+
+  GPS.begin(9600);
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);   // ask GPS to send RMC & GGA sentences
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate, don't use higher rates
+  GPS.sendCommand(PGCMD_ANTENNA);               // notify if antenna is detected
+  useInterrupt(true);                           // use interrupt for reading chars of GPS sentences (From Serial Port)
+
+  bearing = heading;
 }
 
 SIGNAL(TIMER0_COMPA_vect) {       // don't change this !!
@@ -120,15 +133,11 @@ ISR(TIMER4_OVF_vect) {  // Timer interrupt for reading GPS DATA
   sei();        //   reset interrupt flag
   TCNT4  = 336; //   re-initialize timer value
   GPSRead();    //   read GPS data
-  Serial.println();
-  Serial.print("Read GPS");
-  Serial.print(" Runtime: ");
-  Serial.println(millis() / 1000);
 }
 
 void GPSRead() {
   // read GPS data
-    // read from GPS module and update the current position
+    Serial.println("ReadGPS() called");
   if (GPS.newNMEAreceived()) {
     if (!GPS.parse(GPS.lastNMEA()))   // this also sets the newNMEAreceived() flag to false
       return;  // we can fail to parse a sentence in which case we should just wait for another
@@ -141,125 +150,115 @@ void GPSRead() {
 void ReadHeading()
 {
   // calculate HEADING
-  euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-  heading = euler.x() + 10.37;
+    euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
 }
 
 void CalculateBearing() {
-  bearing = heading; //go straight
-  // Calculate Bearing base on GPS Destination
-  /*
-  bearing = 90 - atan2((latDestination - lat),(lonDestination - lon)) * (180 / PI);
-  if(bearing < 0) {
-    bearing += 360;
+  // Calculate Bearing
+    Bearing = 90 - atan2((latDestination - lat),(lonDestination - lon)) * (180 / PI);
+  if(Bearing < 0) {
+    Bearing += 360;
   }
-  */
 }
 
 void CalculateSteer() {
   // Calculate Steer angle based on GPS data and IMU
-  float dr;
-  float dl;
 
-  if(!objFlag) {
-    if (heading > 360)
-    heading -= 360;
-
-    if(heading > bearing) {
-      dl = heading - bearing;
-      dr = (360 - heading) + bearing; 
-    } else {
-      dr = bearing - heading;
-      dl = (360 - bearing) + heading;
-    }
-  
-    if (dl < dr) { 
-      sa = 60; // turn left all the way, it's closer...
-      
-      if(dl < 45)
-       sa = 70;
-  
-      if(dl < 30)
-       sa = 80;
-  
-      if(dl < 15)
-       sa = 85; 
-    } else {
-      sa = 125; // turn right, it's closer...
-  
-      if(dr < 45)
-       sa = 115;
-  
-      if(dr < 30)
-       sa = 105;
-  
-      if(dr < 15)
-       sa = 100;
-    }
-  
-    if(heading >= bearing - 2 && heading <= bearing + 2) {
-      sa = 93; // go straight
-    } 
+  float x = euler.x() + 10.37;
+  //steeringAngle = 93;
+  if (x > 360)
+  {
+    x -= 360;
   }
+
+  // calculate the distance left and right to desired heading
+  ///////////////////////////////////////////////////////////
+  if(x > Bearing) {
+
+    distL = x - Bearing;
+    distR = (360 - x) + Bearing;
+    
+  } else {
+
+    distR = Bearing - x;
+    distL = (360 - Bearing) + x;
+    
+  }
+  ///////////////////////////////////////////////////////////
+
+  // Set the steering angle
+  ///////////////////////////////////////////////////////////
+  if (distL < distR) { 
+    steeringAngle = 60; // turn left all the way, it's closer...
+    
+    if(distL < 45)
+     steeringAngle = 70;
+
+    if(distL < 30)
+     steeringAngle = 80;
+
+    if(distL < 15)
+     steeringAngle = 85;
+    
+  } else {
+    steeringAngle = 125; // turn right, it's closer...
+
+    if(distR < 45)
+     steeringAngle = 115;
+
+    if(distR < 30)
+     steeringAngle = 105;
+
+    if(distR < 15)
+     steeringAngle = 100;
+    
+  }
+
+  // x == ref angle, +/- 1
+  //if(x >= ref - 2 && x <= ref + 2) {
+  if(x == Bearing) {
+    steeringAngle = 93; // go straight
+  }
+  
 }
 
 void SetCarDirection() {    // Input: Lidar data
   // Set Steering angle,
   // If any obstacle is detected by Lidar, Ignore steering angle and turn left or right based on observation
-  // Filter Objs
-  if(dAvg2Use < 2000) {
-    objFlag = 1;
-    if(aAvg2Use > 350 && aAvg2Use < 360) {
-      sa = 125;
-      Serial.print("D:");
-      Serial.print(dAvg);
-      Serial.print(", A:");
-      Serial.print(aAvg);
-      Serial.print(", SA:");
-      Serial.println(sa);
-    } else if(aAvg2Use < 10 && aAvg2Use > 0) {
-      sa = 60;
-      Serial.print("D:");
-      Serial.print(dAvg);
-      Serial.print(", A:");
-      Serial.print(aAvg);
-      Serial.print(", SA:");
-      Serial.println(sa);
+  if(d > 500 && d < 1000)
+  {
+    if(a > 0 && a < 90)
+    {
+      steeringAngle = 60;
     }
-    if(aAvg2Use < 350 && aAvg2Use > 270) {
-      sa = 115;
-      Serial.print("D:");
-      Serial.print(dAvg);
-      Serial.print(", A:");
-      Serial.print(aAvg);
-      Serial.print(", SA:");
-      Serial.println(sa);
+    else if(a > 270 && a < 360)
+    {
+      steeringAngle = 120;
     }
-    if(aAvg2Use > 10 && aAvg2Use < 90) {
-      sa = 70;
-      Serial.print("D:");
-      Serial.print(dAvg);
-      Serial.print(", A:");
-      Serial.print(aAvg);
-      Serial.print(", SA:");
-      Serial.println(sa);
-      
-      
-    }
-  } else {
-    objFlag = 0;
   }
+    myservo.write(steeringAngle);
 }
 
 void SetCarSpeed() {  // Input: GPS data
   // set speed,
   // if destination is within 5 meters of current position, set speed to zero.
-  analogWrite(carSpeedPin, carSpeed); //change to carSpeed for production
-  myservo.write(sa);
+  float deltaX = (lonDestination - lon) * 100000;
+  float deltaY = (latDestination - lat) * 100000;
+  distance = sqrt(pow(deltaX, 2.0) + pow(deltaY, 2.0)) / 100000;  
   
+    carSpeed = 15;
+  if(distance < 4) {
+    carSpeed = 0;
+  }
+
+  analogWrite(carSpeedPin, carSpeed);
+
 }
 
-void ReadLidar() { 
+void ReadLidar() {    // Output: Lidar Data
+  // read Lidar Data from Nano Board (I2C)
+  // you should request data from Nano and read the number of obstacle (within the range) on your rightside and leftside
+  // Then, you can decide to either do nothing, turn left or turn right based on threshold. For instance, 0 = do nothing, 1= left and 2 = right
   String dStr = String();
   String aStr = String();
 
@@ -287,57 +286,37 @@ void ReadLidar() {
 
   d = dStr.toFloat();
   a = aStr.toFloat();
-  dArray[(millis() / 100) % 10] = d;
-  aArray[(millis() / 100) % 10] = a;
+
+  if(d > 500 && d < 1000) {
+    if((a > 0 && a < 90) || (a > 270 && a < 360)) {
+      objectDetected = true;
+    } else {
+      objectDetected = false;
+    }
+  } else {
+    objectDetected = false;
+  }
+  
+  Serial.print("Distance: ");
+  Serial.print(d);
+  Serial.print(", Angle: ");
+  Serial.print(a);
+  Serial.print("\n");
 }
 
 ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
   sei();                  // reset interrupt flag
   TCNT1  = 59016;
-
-  int x = (millis() / 100) % 10;
-
-  if(x == 0) {
-    for(int i = 0; i < 10; i++) {
-      dAvg += dArray[i];
-      aAvg += aArray[i];
-    }
-
-    dAvg2Use = dAvg / 10;
-    aAvg2Use = aAvg / 10;
-
-    Serial.print("\tdAvg = ");
-    Serial.print(dAvg);
-  
-    Serial.println();
-    
-    Serial.print("\taAvg = ");
-    Serial.print(aAvg);
-    
-    dAvg = 0;
-    aAvg = 0;
-    for(int i = 0; i < 10; i++) {
-      dArray[i] = 0;
-      aArray[i] = 0;
-    }
-  }
-  
-  Serial.println();
-  Serial.print("Iteration: ");
-  Serial.print(x);
-  Serial.print(" Runtime: ");
-  Serial.println(millis() / 1000);
-  Serial.println();
-
   ReadHeading();
   ReadLidar();
-  CalculateBearing();
-  CalculateSteer();
+  if(!objectDetected)
+  {
+    CalculateBearing();
+    CalculateSteer();
+  }
+
   SetCarDirection();
   SetCarSpeed();
-
-  dAvg += dArray[x];
-  aAvg += aArray[x];
 }
 
 
@@ -350,7 +329,7 @@ void printLocationOnLCD() {
 }
 
 void printDistanceOnLCD() {
-  
+
 }
 
 void printObstacleOnLCD() {

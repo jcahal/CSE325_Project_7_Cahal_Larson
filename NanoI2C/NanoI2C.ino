@@ -71,7 +71,7 @@ void loop()
       // a new scan, display the previous data...
        minDist = 1250;
     } else {
-       if ( distance > 500 && distance < 1250) {
+       if ( distance > 500 && distance < 1000) {
           d = distance;
           a = angle;
        }
