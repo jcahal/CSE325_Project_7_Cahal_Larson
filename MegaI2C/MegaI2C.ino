@@ -33,15 +33,7 @@ long int lon;                     // GPS latitude in degree decimal * 100000   |
 long int latDestination = 33.423716 * 100000; //33.425891 * 100000;       // define an initial reference Latitude of destination
 long int lonDestination =  -111.939204 * 100000; //-111.940458 * 100000;    // define an initial reference Longitude of destination
 int localkey = 0;                                   // var
-float d = 0;
-float a = 0;
-float dAvg;
-float aAvg;
-float dArray[10];
-float aArray[10];
-int objFlag = 0;
-float dAvg2Use = 0;
-float aAvg2Use = 0;
+int state = 0;
 
 void setup() {
   myservo.attach(44);     // servo is connected to pin 44     (All pins are used by LCD except 2. Pin 2 is used for DC motor)
@@ -158,48 +150,78 @@ void CalculateBearing() {
 
 void CalculateSteer() {
   // Calculate Steer angle based on GPS data and IMU
-  float dr;
-  float dl;
-
-  if(!objFlag) {
-    if (heading > 360)
-    heading -= 360;
-
-    if(heading > bearing) {
-      dl = heading - bearing;
-      dr = (360 - heading) + bearing; 
-    } else {
-      dr = bearing - heading;
-      dl = (360 - bearing) + heading;
-    }
-  
-    if (dl < dr) { 
-      sa = 60; // turn left all the way, it's closer...
+  switch(state) {
+    case 0: {
+      float dr;
+      float dl;
       
-      if(dl < 45)
-       sa = 70;
+      if (heading > 360)
+      heading -= 360;
   
-      if(dl < 30)
-       sa = 80;
-  
-      if(dl < 15)
-       sa = 85; 
-    } else {
-      sa = 125; // turn right, it's closer...
-  
-      if(dr < 45)
-       sa = 115;
-  
-      if(dr < 30)
-       sa = 105;
-  
-      if(dr < 15)
-       sa = 100;
+      if(heading > bearing) {
+        dl = heading - bearing;
+        dr = (360 - heading) + bearing; 
+      } else {
+        dr = bearing - heading;
+        dl = (360 - bearing) + heading;
+      }
+    
+      if (dl < dr) { 
+        sa = 60; // turn left all the way, it's closer...
+        
+        if(dl < 45)
+         sa = 70;
+    
+        if(dl < 30)
+         sa = 80;
+    
+        if(dl < 15)
+         sa = 85; 
+      } else {
+        sa = 125; // turn right, it's closer...
+    
+        if(dr < 45)
+         sa = 115;
+    
+        if(dr < 30)
+         sa = 105;
+    
+        if(dr < 15)
+         sa = 100;
+      }
+    
+      if(heading >= bearing - 2 && heading <= bearing + 2) {
+        sa = 93; // go straight
+      } 
+      break;
     }
-  
-    if(heading >= bearing - 2 && heading <= bearing + 2) {
-      sa = 93; // go straight
-    } 
+    case 1: {
+      sa = 100; 
+      break;
+    }
+    case 2: {
+      sa = 105;
+      break;
+    }
+    case 3: {
+      sa = 115;
+      break;
+    }
+    case 4: {
+      sa = 84;
+      break;
+    }
+    case 5: {
+      sa = 80;
+      break;
+    }
+    case 6: {
+      sa = 70;
+      break;
+    }
+    case default: {
+      break;
+    }
   }
 }
 
@@ -207,48 +229,7 @@ void SetCarDirection() {    // Input: Lidar data
   // Set Steering angle,
   // If any obstacle is detected by Lidar, Ignore steering angle and turn left or right based on observation
   // Filter Objs
-  if(dAvg2Use < 2000) {
-    objFlag = 1;
-    if(aAvg2Use > 350 && aAvg2Use < 360) {
-      sa = 125;
-      Serial.print("D:");
-      Serial.print(dAvg);
-      Serial.print(", A:");
-      Serial.print(aAvg);
-      Serial.print(", SA:");
-      Serial.println(sa);
-    } else if(aAvg2Use < 10 && aAvg2Use > 0) {
-      sa = 60;
-      Serial.print("D:");
-      Serial.print(dAvg);
-      Serial.print(", A:");
-      Serial.print(aAvg);
-      Serial.print(", SA:");
-      Serial.println(sa);
-    }
-    if(aAvg2Use < 350 && aAvg2Use > 270) {
-      sa = 115;
-      Serial.print("D:");
-      Serial.print(dAvg);
-      Serial.print(", A:");
-      Serial.print(aAvg);
-      Serial.print(", SA:");
-      Serial.println(sa);
-    }
-    if(aAvg2Use > 10 && aAvg2Use < 90) {
-      sa = 70;
-      Serial.print("D:");
-      Serial.print(dAvg);
-      Serial.print(", A:");
-      Serial.print(aAvg);
-      Serial.print(", SA:");
-      Serial.println(sa);
-      
-      
-    }
-  } else {
-    objFlag = 0;
-  }
+  
 }
 
 void SetCarSpeed() {  // Input: GPS data
@@ -260,84 +241,20 @@ void SetCarSpeed() {  // Input: GPS data
 }
 
 void ReadLidar() { 
-  String dStr = String();
-  String aStr = String();
-
-  // Get Obj @ Distance > 500
-  Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
-  Wire.write(1);        // send state 1
-  Wire.endTransmission();
-  
-  Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
-  while(Wire.available()) {
-    char c = Wire.read();
-    dStr.concat(c);
-  }
-
-  // Get Angle of Obj @ Distance > 500
-  Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
-  Wire.write(2);        // change to state 2
-  Wire.endTransmission();
-  
-  Wire.requestFrom(SLAVE_ADDR, 10); // request up to 10 chars
-  while(Wire.available()) {
-    char c = Wire.read();
-    aStr.concat(c);
-  }
-
-  d = dStr.toFloat();
-  a = aStr.toFloat();
-  dArray[(millis() / 100) % 10] = d;
-  aArray[(millis() / 100) % 10] = a;
+  // Get state 
+  Wire.requestFrom(SLAVE_ADDR, 1);
+  state = Wire.read();
 }
 
 ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
   sei();                  // reset interrupt flag
   TCNT1  = 59016;
-
-  int x = (millis() / 100) % 10;
-
-  if(x == 0) {
-    for(int i = 0; i < 10; i++) {
-      dAvg += dArray[i];
-      aAvg += aArray[i];
-    }
-
-    dAvg2Use = dAvg / 10;
-    aAvg2Use = aAvg / 10;
-
-    Serial.print("\tdAvg = ");
-    Serial.print(dAvg);
-  
-    Serial.println();
-    
-    Serial.print("\taAvg = ");
-    Serial.print(aAvg);
-    
-    dAvg = 0;
-    aAvg = 0;
-    for(int i = 0; i < 10; i++) {
-      dArray[i] = 0;
-      aArray[i] = 0;
-    }
-  }
-  
-  Serial.println();
-  Serial.print("Iteration: ");
-  Serial.print(x);
-  Serial.print(" Runtime: ");
-  Serial.println(millis() / 1000);
-  Serial.println();
-
   ReadHeading();
   ReadLidar();
   CalculateBearing();
   CalculateSteer();
-  SetCarDirection();
+  //SetCarDirection(); //nothing in it
   SetCarSpeed();
-
-  dAvg += dArray[x];
-  aAvg += aArray[x];
 }
 
 

@@ -11,12 +11,12 @@ unsigned long time = millis();    // time variable for reseting variables
 
 int c1;                           // variable for received integer
 
-float minDist = 100000;       // minimum distance an object has to be to trigger response
+float minDist = 1250;       // minimum distance an object has to be to trigger response
 float aMinDist = 0;         // angle of the object when at minimum distance
 
 float d = -1.00;
 float a = -1.00;
-int objLocation = 0;
+int state = 0;
 
 void setup() {
   pinMode(RPLIDAR_MOTOR, OUTPUT); // set lidar speed control pin as output
@@ -31,29 +31,33 @@ void receiveEvent(int bytes)
 {
   
   // read the received byte as integer. This indicates what data to send back when master is requesting data
-  state = Wire.read();
+  //state = Wire.read();
           
 }
 
 // This is when the master wants the slave to write something
 void requestEvent() {
-   String dStr = String(d, 2);
-   String aStr = String(a, 2);
+  if(d > 500 && d < 1000) {
+    if(a > 270 && a < 300) {
+      state = 1;
+    } else if(a > 300 && a < 330) {
+      state = 2;
+    } else if(a > 330 && a < 360) {
+      state = 3;
+    } else if(a > 0 && a < 30) {
+      state = 4;
+    } else if(a > 30 && a < 60) {
+      state = 5;
+    } else if(a > 60 && a < 90) {
+      state = 6;
+    } else {
+      state = 0;
+    }
+  } else {
+    state = 0; 
+  }
 
-   switch(state) {
-    case 1: { // send distance
-      Wire.write(dStr.c_str());
-      break;
-    }
-    case 2: { // send angle
-      Wire.write(aStr.c_str());
-      break;
-    }
-    case 3: { //master done with dist. and angle... reset
-      d = -1.00;
-      a = -1.00;  
-    }
-   }
+  Wire.write(state);
 }
 
 void loop() 
@@ -69,12 +73,10 @@ void loop()
     
     if (lidar.getCurrentPoint().startBit) {
       // a new scan, display the previous data...
-       minDist = 3000;
-       objLocation = 0;
+       minDist = 1250;
     } else {
-       if ( distance > 500 && distance > 3000) {
-          if(angle > )
-       }
+       d = distance;
+       a = angle;
     }
     
   } else {                                                  // if lidar is not responding           // Dont change this......
