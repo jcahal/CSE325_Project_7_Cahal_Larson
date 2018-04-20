@@ -33,8 +33,8 @@ int carSpeedPin = 2;              // pin for DC motor (PWM for motor driver). do
 float errorHeadingRef = 0;        // error
 long int lat;                     // GPS latitude in degree decimal * 100000   |     we multiply decimal degree by 100000 to convert it to meter  https://en.wikipedia.org/wiki/Decimal_degrees
 long int lon;                     // GPS latitude in degree decimal * 100000   |     0.00001 decimal degree is equal to 1.0247 m at 23 degree N/S
-long int latDestination = 33.425891 * 100000;       // define an initial reference Latitude of destination
-long int lonDestination =  -111.940458 * 100000;    // define an initial reference Longitude of destination
+long int latDestination = 33.420851 * 100000;       // define an initial reference Latitude of destination
+long int lonDestination =  -111.934011 * 100000;    // define an initial reference Longitude of destination
 float Bearing = 0;                                  // initialize bearing
 int localkey = 0;                                   // var
 imu::Vector<3> euler;                         // Vector of IMU
@@ -55,18 +55,6 @@ void setup() {
   lcd.begin( 16, 2 );     // LCD type is 16x2 (col & row)
 
   ///Setting the reference (Lat and Lon)///
-  localkey = 0;
-  while (localkey != 1) {
-    lcd.clear();
-    localkey = keypad.getKey();
-    lcd.print("Press Select");
-    lcd.setCursor(0, 1);
-    lcd.print("to save dest.");
-    delay(100);
-  }
-  GPSRead();
-  latDestination = lat;     // saving the destiantion point
-  lonDestination = lon;     // saving the destiantion point
   localkey = 0;
   while (localkey != 1) {
     lcd.clear();
