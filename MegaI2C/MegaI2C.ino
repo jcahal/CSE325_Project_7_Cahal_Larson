@@ -46,6 +46,9 @@ int distR = 0;                                // The distance right in degrees t
 float d = 0;
 float a = 0;
 boolean objectDetected = false;
+float lastD = 50000;
+float lastA = 50000;
+int counter = 0;
 
 void setup() {
   myservo.attach(44);     // servo is connected to pin 44     (All pins are used by LCD except 2. Pin 2 is used for DC motor)
@@ -155,7 +158,7 @@ void ReadHeading()
 
 void CalculateBearing() {
   // Calculate Bearing
-    Bearing = 90 - atan2((latDestination - lat),(lonDestination - lon)) * (180 / PI);
+    Bearing = 90 - (atan2((latDestination - lat),(lonDestination - lon)) * (180 / PI));
   if(Bearing < 0) {
     Bearing += 360;
   }
@@ -215,8 +218,8 @@ void CalculateSteer() {
   }
 
   // x == ref angle, +/- 1
-  //if(x >= ref - 2 && x <= ref + 2) {
-  if(x == Bearing) {
+  if(x >= Bearing - 2 && x <= Bearing + 2) {
+  //if(x == Bearing) {
     steeringAngle = 93; // go straight
   }
   
@@ -225,7 +228,7 @@ void CalculateSteer() {
 void SetCarDirection() {    // Input: Lidar data
   // Set Steering angle,
   // If any obstacle is detected by Lidar, Ignore steering angle and turn left or right based on observation
-  if(d > 500 && d < 1000)
+  if(d > 500 && d < 1500)
   {
     if(a > 0 && a < 90)
     {
@@ -236,7 +239,7 @@ void SetCarDirection() {    // Input: Lidar data
       steeringAngle = 120;
     }
   }
-    myservo.write(steeringAngle);
+    
 }
 
 void SetCarSpeed() {  // Input: GPS data
@@ -246,13 +249,14 @@ void SetCarSpeed() {  // Input: GPS data
   float deltaY = (latDestination - lat) * 100000;
   distance = sqrt(pow(deltaX, 2.0) + pow(deltaY, 2.0)) / 100000;  
   
-    carSpeed = 15;
+  carSpeed = 15;
+  
   if(distance < 4) {
     carSpeed = 0;
   }
 
   analogWrite(carSpeedPin, carSpeed);
-
+  myservo.write(steeringAngle);
 }
 
 void ReadLidar() {    // Output: Lidar Data
@@ -261,6 +265,8 @@ void ReadLidar() {    // Output: Lidar Data
   // Then, you can decide to either do nothing, turn left or turn right based on threshold. For instance, 0 = do nothing, 1= left and 2 = right
   String dStr = String();
   String aStr = String();
+  
+  
 
   // Get Obj @ Distance > 500
   Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
@@ -287,15 +293,23 @@ void ReadLidar() {    // Output: Lidar Data
   d = dStr.toFloat();
   a = aStr.toFloat();
 
-  if(d > 500 && d < 1000) {
-    if((a > 0 && a < 90) || (a > 270 && a < 360)) {
+
+  if(d > 500 && d < 1500) 
+  {
+    if((a > 0 && a < 90) || (a > 270 && a < 360)) 
+    {
       objectDetected = true;
-    } else {
+    } 
+    else 
+    {
       objectDetected = false;
     }
-  } else {
+  } 
+  else 
+  {
     objectDetected = false;
   }
+
   
   Serial.print("Distance: ");
   Serial.print(d);
@@ -309,14 +323,26 @@ ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
   TCNT1  = 59016;
   ReadHeading();
   ReadLidar();
+  
   if(!objectDetected)
   {
     CalculateBearing();
     CalculateSteer();
   }
+  else
+  {
+    SetCarDirection();
+  }
 
-  SetCarDirection();
   SetCarSpeed();
+
+  int x = (millis() / 100) % 10;
+  if(x == 0) {
+    Wire.beginTransmission(SLAVE_ADDR); // transmit to device #8
+    Wire.write(3);        // send state 3
+    Wire.endTransmission();
+    Serial.println(x);
+  }
 }
 
 

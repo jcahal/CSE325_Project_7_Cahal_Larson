@@ -11,7 +11,7 @@ unsigned long time = millis();    // time variable for reseting variables
 
 int c1;                           // variable for received integer
 
-float minDist = 1250;       // minimum distance an object has to be to trigger response
+float minDist = 1000;       // minimum distance an object has to be to trigger response
 float aMinDist = 0;         // angle of the object when at minimum distance
 
 float d = -1.00;
@@ -32,6 +32,10 @@ void receiveEvent(int bytes)
   
   // read the received byte as integer. This indicates what data to send back when master is requesting data
   state = Wire.read();
+  if(state == 3) {
+    d = -1.00;
+    a = -1.00;
+  }
           
 }
 
@@ -49,10 +53,6 @@ void requestEvent() {
       Wire.write(aStr.c_str());
       break;
     }
-    case 3: { //master done with dist. and angle... reset
-      d = -1.00;
-      a = -1.00;  
-    }
    }
 }
 
@@ -67,14 +67,31 @@ void loop()
     float distance = lidar.getCurrentPoint().distance;
     float angle = lidar.getCurrentPoint().angle;
     
-    if (lidar.getCurrentPoint().startBit) {
+    if (lidar.getCurrentPoint().startBit) 
+    {
       // a new scan, display the previous data...
-       minDist = 1250;
-    } else {
-       if ( distance > 500 && distance < 1000) {
-          d = distance;
-          a = angle;
+       minDist = 1000;
+    } 
+    else 
+    {
+       if ( distance > 500 && distance < 1500) 
+       {
+         if((angle > 0 && angle < 90) || (angle > 270 && angle < 360))
+         {
+           d = distance;
+           a = angle;
+         }
+         /*else
+         {
+          d = -1.00;
+          a = -1.00;
+         }*/
        }
+       /*else
+       {
+        d = -1.00;
+        a = -1.00;
+       }*/
     }
     
   } else {                                                  // if lidar is not responding           // Dont change this......
