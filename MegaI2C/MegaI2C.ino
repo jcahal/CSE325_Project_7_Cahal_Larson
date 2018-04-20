@@ -156,7 +156,7 @@ void CalculateSteer() {
       float dl;
       
       if (heading > 360)
-      heading -= 360;
+        heading -= 360;
   
       if(heading > bearing) {
         dl = heading - bearing;
@@ -208,7 +208,7 @@ void CalculateSteer() {
       break;
     }
     case 4: {
-      sa = 84;
+      sa = 70;
       break;
     }
     case 5: {
@@ -216,7 +216,7 @@ void CalculateSteer() {
       break;
     }
     case 6: {
-      sa = 70;
+      sa = 84;
       break;
     }
     case default: {
