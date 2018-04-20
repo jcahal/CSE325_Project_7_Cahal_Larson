@@ -236,8 +236,17 @@ void SetCarSpeed() {  // Input: GPS data
   float deltaX = (lonDestination - lon) * 100000;
   float deltaY = (latDestination - lat) * 100000;
   distance = sqrt(pow(deltaX, 2.0) + pow(deltaY, 2.0)) / 100000;  
+
+  if(lat < 33.421166 * 1000000)
+  {
+    carSpeed = 40;
+  }
+  else
+  {
+    carSpeed = 70;
+  }
   
-  carSpeed = 15;
+  
   
   if(distance < 4) {
     carSpeed = 0;
