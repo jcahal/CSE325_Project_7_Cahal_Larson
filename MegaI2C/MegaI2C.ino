@@ -54,6 +54,22 @@ void setup() {
   myservo.attach(44);     // servo is connected to pin 44     (All pins are used by LCD except 2. Pin 2 is used for DC motor)
   lcd.begin( 16, 2 );     // LCD type is 16x2 (col & row)
 
+  // GPS 
+  noInterrupts();           // disable all interrupts
+  TCCR4A = 0;
+  TCCR4B = 0;
+  TCNT4  = 336;             // every 1 second
+  TCCR4B |= (1 << CS42);    // 256 prescaler
+  TIMSK4 |= (1 << TOIE4);  // enable timer compare interrupt
+  interrupts();
+
+  GPS.begin(9600);
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);   // ask GPS to send RMC & GGA sentences
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate, don't use higher rates
+  GPS.sendCommand(PGCMD_ANTENNA);               // notify if antenna is detected
+  useInterrupt(true); 
+
+
   ///Setting the reference (Lat and Lon)///
   localkey = 0;
   while (localkey != 1) {
@@ -89,28 +105,16 @@ void setup() {
   bno.setCalibData(c_data);                                                                                       // SET CALIBRATION DATA
   bno.setExtCrystalUse(true);
 
-  // set timer interrupts
+  // Steering and Actuate interupts
   noInterrupts();           // disable all interrupts
-  TCCR1A = 0;               // initialize timer1
-  TCCR1B = 0;               // initialize timer1
-  TCNT1  = 59016;           // interrupt is generated every 0.1 second ( ISR(TIMER1_OVF_vect) is called)
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1  = 59016;           // every 0.1 second
   TCCR1B |= (1 << CS12);    // 256 prescaler
-  TIMSK1 |= (1 << TOIE1);   // enable timer compare interrupt
+  TIMSK1 |= (1 << TOIE1);  // enable timer compare interrupt
+  interrupts();
 
-  TCCR4A = 0;               // initialize timer4
-  TCCR4B = 0;               // initialize timer4
-  TCNT4  = 336;             // interrupt is generated every 1 second  ( ISR(TIMER4_OVF_vect) is called)
-  TCCR4B |= (1 << CS42);    // 256 prescaler
-  TIMSK4 |= (1 << TOIE4);   // enable timer compare interrupt
-  interrupts();             // enable intrrupt flag again
-
-  GPS.begin(9600);
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);   // ask GPS to send RMC & GGA sentences
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);   // 1 Hz update rate, don't use higher rates
-  GPS.sendCommand(PGCMD_ANTENNA);               // notify if antenna is detected
-  useInterrupt(true);                           // use interrupt for reading chars of GPS sentences (From Serial Port)
-
-  bearing = heading;
+                            // use interrupt for reading chars of GPS sentences (From Serial Port)
 }
 
 SIGNAL(TIMER0_COMPA_vect) {       // don't change this !!
@@ -158,7 +162,7 @@ void ReadHeading()
 
 void CalculateBearing() {
   // Calculate Bearing
-    Bearing = 90 - (atan2((latDestination - lat),(lonDestination - lon)) * (180 / PI));
+    Bearing = 90 - atan2((latDestination - lat),(lonDestination - lon)) * (180 / PI);
   if(Bearing < 0) {
     Bearing += 360;
   }
@@ -347,7 +351,9 @@ ISR(TIMER1_OVF_vect) {        // function will be call every 0.1 seconds
 
 
 void printHeadingOnLCD() {
-
+  lcd.print(lat);
+  lcd.setCursor(0, 1);
+  lcd.print(lon);
 }
 
 void printLocationOnLCD() {
